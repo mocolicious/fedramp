@@ -3,6 +3,8 @@ package template
 import (
 	"errors"
 	"fmt"
+	"github.com/GoComply/fedramp/pkg/fedramp"
+	"github.com/GoComply/fedramp/pkg/templater/template/checkbox"
 	"github.com/jbowtie/gokogiri/xml"
 	"regexp"
 	"strings"
@@ -95,9 +97,7 @@ func (rr *ResponsibleRole) SetValue(roleName string) error {
 	if err != nil || len(textNodes) < 1 {
 		return errors.New("Cannot find any child text nodes when processing Responsible Role column")
 	}
-	textNodes[0].SetContent(fmt.Sprintf("Responsible Role: %s", roleName))
-
-	return nil
+	return textNodes[0].SetContent(fmt.Sprintf("Responsible Role: %s", roleName))
 }
 
 type ParameterRow struct {
@@ -159,8 +159,54 @@ func (pr *ParameterRow) SetValue(roleName string) error {
 	if err != nil || len(textNodes) < 1 {
 		return errors.New("Cannot find any child text nodes when processing Parametr row")
 	}
-	textNodes[0].SetContent(fmt.Sprintf("%s %s", textNodes[0].Content(), roleName))
+	return textNodes[0].SetContent(fmt.Sprintf("%s %s", textNodes[0].Content(), roleName))
+}
 
+type ImplementationStatus struct {
+	node     xml.Node
+	statuses map[fedramp.ImplementationStatus]*checkbox.CheckBox
+}
+
+func (csi *ControlSummaryInformation) ImplementationStatus() (*ImplementationStatus, error) {
+	rows, err := csi.table.Search(".//w:tc[starts-with(normalize-space(.), 'Implementation Status')]")
+	if err != nil {
+		return nil, err
+	}
+	if len(rows) != 1 {
+		name, err := csi.ControlName()
+		if err != nil {
+			return nil, err
+		}
+		return nil, fmt.Errorf("Could not find 'Implementation Status' cell in Control Summary Information Table of %s", name)
+	}
+	return parseImplementationStatus(rows[0])
+}
+
+func parseImplementationStatus(node xml.Node) (is *ImplementationStatus, err error) {
+	paragraphs, err := node.Search(".//w:p")
+	if err != nil {
+		return
+	}
+	statuses := map[fedramp.ImplementationStatus]*checkbox.CheckBox{}
+	for _, paragraph := range paragraphs {
+		cb, err := checkbox.Parse(paragraph)
+		if err != nil {
+			if _, ok := err.(*checkbox.NotFound); ok {
+				continue
+			}
+			return nil, err
+		}
+		cbStatus := fedramp.StatusFromDocx(cb.Text())
+		statuses[cbStatus] = cb
+	}
+
+	return &ImplementationStatus{node: node, statuses: statuses}, nil
+}
+
+func (is *ImplementationStatus) SetValue(newStatus fedramp.ImplementationStatus) error {
+	cb, found := is.statuses[newStatus]
+	if found {
+		cb.SetChecked()
+	}
 	return nil
-
 }

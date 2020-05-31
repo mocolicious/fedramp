@@ -3,6 +3,7 @@ package fedramp
 import (
 	"fmt"
 	"github.com/GoComply/fedramp/pkg/fedramp/common"
+	"github.com/GoComply/fedramp/pkg/utils"
 	"github.com/docker/oscalkit/pkg/oscal/constants"
 	"github.com/docker/oscalkit/pkg/oscal_source"
 	ssp "github.com/docker/oscalkit/types/oscal/system_security_plan"
@@ -58,7 +59,7 @@ func (p *SSP) Level() common.BaselineLevel {
 }
 
 func (p *SSP) ResponsibleRoleForControl(controlId string) string {
-	ir, found := p.implementedRequirementsCache[controlId]
+	ir, found := p.implementedRequirementsCache[utils.ControlKeyToOSCAL(controlId)]
 	if !found {
 		return "No information available"
 	}
@@ -81,4 +82,18 @@ func (p *SSP) ParamValue(controlId string, index int) string {
 		}
 	}
 	return ""
+}
+
+func (p *SSP) ImplementationStatusForControl(controlId string) ImplementationStatus {
+	ir, found := p.implementedRequirementsCache[utils.ControlKeyToOSCAL(controlId)]
+	if !found {
+		return StatusNoStatus
+	}
+
+	for _, annotation := range ir.Annotations {
+		if annotation.Name == "implementation-status" && annotation.Ns == "https://fedramp.gov/ns/oscal" {
+			return StatusFromOSCAL(annotation.Value)
+		}
+	}
+	return StatusNoStatus
 }
